@@ -1,22 +1,5 @@
 # 🎓 Infostealer Educational - Análisis de Ciberseguridad
 
-## 📋 Tabla de Contenidos
-
-1. [Descripción General](#descripción-general)
-2. [Declaración de Propósito](#declaración-de-propósito)
-3. [Requisitos del Sistema](#requisitos-del-sistema)
-4. [Instalación Paso a Paso](#instalación-paso-a-paso)
-5. [Uso en Laboratorio](#uso-en-laboratorio)
-6. [Análisis de Técnicas Maliciosas](#análisis-de-técnicas-maliciosas)
-7. [Compilación y Análisis de Evasión](#compilación-y-análisis-de-evasión)
-8. [Generación de Reportes](#generación-de-reportes)
-9. [Herramientas Forenses](#herramientas-forenses)
-10. [Defensa y Mitigación](#defensa-y-mitigación)
-11. [Solución de Problemas](#solución-de-problemas)
-12. [Preguntas Frecuentes](#preguntas-frecuentes)
-
----
-
 ## 📝 Descripción General
 
 **Infostealer Educational** es un proyecto educativo en Python que demuestra técnicas de análisis de seguridad y comportamiento de malware infostealer. Diseñado para laboratorios de ciberseguridad, permite estudiar y comprender cómo funcionan herramientas maliciosas reales.
@@ -582,8 +565,3 @@ El usuario acepta:
 - Reportar vulnerabilidades responsablemente
 
 ---
-
-**Versión**: 1.0 Educativa  
-**Última actualización**: 02/11/2025  
-**Propósito**: Educación en Ciberseguridad  
-**Nivel**: Avanzado (estudiantes de seguridad informática)
